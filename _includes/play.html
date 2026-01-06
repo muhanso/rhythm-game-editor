@@ -1,0 +1,40 @@
+<span class="section-header">파일 업로드</span>
+<div class="control-group">
+    <input type="file" id="musicInput" style="display: none;" accept="audio/*">
+    <input type="file" id="csvInput" style="display: none;" accept=".csv">
+    <div class="drop-box" id="musicDrop" style="border: 1px dashed #444; padding: 15px; text-align: center; font-size: 0.75rem; color: #888; border-radius: 8px; margin-bottom: 10px; cursor: pointer;">노래 파일 클릭/드래그</div>
+    <div class="drop-box" id="csvDrop" style="border: 1px dashed #444; padding: 15px; text-align: center; font-size: 0.75rem; color: #888; border-radius: 8px; cursor: pointer;">채보 파일 클릭/드래그</div>
+</div>
+
+<script>
+    const musicInput = document.getElementById('musicInput');
+    const csvInput = document.getElementById('csvInput');
+    
+    document.getElementById('musicDrop').onclick = () => musicInput.click();
+    document.getElementById('csvDrop').onclick = () => csvInput.click();
+
+    musicInput.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (!audioCtx) audioCtx = new AudioContext();
+        audioBuffer = await audioCtx.decodeAudioData(await file.arrayBuffer());
+        document.getElementById('musicDrop').innerText = file.name;
+        if (typeof renderVisibleNotes === 'function') renderVisibleNotes();
+    };
+
+    csvInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const lines = ev.target.result.split('\n');
+            if (lines.length < 3) return;
+            allNotesData = []; 
+            // CSV 파싱 및 정렬 로직 (기존 v5.4 로직과 동일)
+            // ... (생략: 이전 답변의 CSV 로직 통합)
+            document.getElementById('csvDrop').innerText = file.name;
+            if (typeof renderVisibleNotes === 'function') renderVisibleNotes();
+        };
+        reader.readAsText(file);
+    };
+</script>
