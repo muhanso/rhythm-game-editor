@@ -5,10 +5,12 @@
         <input type="number" id="snapInput" value="4" style="width: 100%; background: #2a2a2a; border: none; color: white; padding: 8px; border-radius: 4px;">
     </div>
     <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; background: #252525; padding: 5px; border-radius: 8px;">
-        <button id="btn-magnet" class="tool-btn active"><i data-lucide="magnet" size="16"></i></button>
-        <button id="btn-mirror" class="tool-btn"><i data-lucide="flip-horizontal-2" size="16"></i></button>
-        <button id="btn-flip" class="tool-btn"><i data-lucide="flip-vertical-2" size="16"></i></button>
-        <button id="btn-random" class="tool-btn"><i data-lucide="dices" size="16"></i></button>
+        <!-- 비트 표시선(그리드) 온오프 버튼 추가 -->
+        <button id="btn-grid" class="tool-btn active" title="비트 표시선"><i data-lucide="ruler" size="16"></i></button>
+        <button id="btn-magnet" class="tool-btn active" title="자석 모드"><i data-lucide="magnet" size="16"></i></button>
+        <button id="btn-mirror" class="tool-btn" title="좌우 반전"><i data-lucide="flip-horizontal-2" size="16"></i></button>
+        <button id="btn-flip" class="tool-btn" title="상하 반전"><i data-lucide="flip-vertical-2" size="16"></i></button>
+        <button id="btn-random" class="tool-btn" title="랜덤 레인"><i data-lucide="dices" size="16"></i></button>
     </div>
 </div>
 
@@ -17,33 +19,100 @@
     let historyStack = [];
 
     function initEditor() {
+        // 비트 표시선(그리드) 토글 기능
+        document.getElementById('btn-grid').onclick = function() {
+            const grid = document.getElementById('gridLayer');
+            if (grid) {
+                const isHidden = grid.style.display === 'none';
+                grid.style.display = isHidden ? 'block' : 'none';
+                this.classList.toggle('active', isHidden);
+            }
+        };
+
+        // 자석 기능 토글
+        document.getElementById('btn-magnet').onclick = function() {
+            isMagnetEnabled = !isMagnetEnabled;
+            this.classList.toggle('active', isMagnetEnabled);
+        };
+
         // 단축키 감지 (Ctrl+C, V, X, Z)
         window.addEventListener('keydown', (e) => {
             if (!e.ctrlKey) return;
             
             if (e.key === 'c') { // 복사
-                clipboard = allNotesData.filter(n => selectedNoteIds.has(n.id)).map(n => ({...n, id: Math.random()}));
+                e.preventDefault();
+                clipboard = allNotesData.filter(n => selectedNoteIds.has(n.id)).map(n => ({
+                    ...n, 
+                    id: Math.random().toString(36).substr(2, 9) 
+                }));
             }
             if (e.key === 'v') { // 붙여넣기
+                e.preventDefault();
+                if (clipboard.length === 0) return;
                 saveHistory();
                 clipboard.forEach(n => {
-                    const clone = {...n, id: Math.random().toString(36).substr(2,9), beat: n.beat + 1};
+                    const clone = {
+                        ...n, 
+                        id: Math.random().toString(36).substr(2, 9), 
+                        beat: n.beat + 1 // 1비트 뒤에 붙여넣기
+                    };
                     allNotesData.push(clone);
                 });
-                renderVisibleNotes();
+                if (typeof renderVisibleNotes === 'function') renderVisibleNotes();
+            }
+            if (e.key === 'x') { // 잘라내기
+                e.preventDefault();
+                saveHistory();
+                clipboard = allNotesData.filter(n => selectedNoteIds.has(n.id)).map(n => ({
+                    ...n, 
+                    id: Math.random().toString(36).substr(2, 9) 
+                }));
+                allNotesData = allNotesData.filter(n => !selectedNoteIds.has(n.id));
+                selectedNoteIds.clear();
+                if (typeof renderVisibleNotes === 'function') renderVisibleNotes();
             }
             if (e.key === 'z') { // 실행 취소
+                e.preventDefault();
                 if (historyStack.length > 0) {
                     allNotesData = historyStack.pop();
-                    renderVisibleNotes();
+                    if (typeof renderVisibleNotes === 'function') renderVisibleNotes();
                 }
             }
         });
 
-        document.getElementById('btn-random').onclick = () => {
+        // 좌우 반전
+        document.getElementById('btn-mirror').onclick = () => {
+            if (selectedNoteIds.size === 0) return;
             saveHistory();
-            allNotesData.forEach(n => { if(selectedNoteIds.has(n.id)) n.lane = Math.floor(Math.random()*4); });
-            renderVisibleNotes();
+            allNotesData.forEach(n => {
+                if (selectedNoteIds.has(n.id)) {
+                    n.lane = 3 - n.lane; // 0<->3, 1<->2
+                }
+            });
+            if (typeof renderVisibleNotes === 'function') renderVisibleNotes();
+        };
+
+        // 상하 반전 (선택된 노트들의 중앙 비트 기준)
+        document.getElementById('btn-flip').onclick = () => {
+            const selected = allNotesData.filter(n => selectedNoteIds.has(n.id));
+            if (selected.length < 2) return;
+            saveHistory();
+            const beats = selected.map(n => n.beat);
+            const mid = (Math.min(...beats) + Math.max(...beats)) / 2;
+            selected.forEach(n => {
+                n.beat = mid + (mid - n.beat);
+            });
+            if (typeof renderVisibleNotes === 'function') renderVisibleNotes();
+        };
+
+        // 랜덤 배치
+        document.getElementById('btn-random').onclick = () => {
+            if (selectedNoteIds.size === 0) return;
+            saveHistory();
+            allNotesData.forEach(n => { 
+                if(selectedNoteIds.has(n.id)) n.lane = Math.floor(Math.random() * 4); 
+            });
+            if (typeof renderVisibleNotes === 'function') renderVisibleNotes();
         };
     }
 
@@ -52,4 +121,19 @@
         if (historyStack.length > 50) historyStack.shift();
     }
 </script>
-<style>.tool-btn { background: none; border: none; color: #555; cursor: pointer; padding: 5px; }.tool-btn.active { color: #33ccff; }</style>
+<style>
+    .tool-btn { 
+        background: none; 
+        border: none; 
+        color: #555; 
+        cursor: pointer; 
+        padding: 5px; 
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        transition: background 0.2s;
+    }
+    .tool-btn:hover { background: rgba(255, 255, 255, 0.05); }
+    .tool-btn.active { color: #33ccff; }
+</style>
