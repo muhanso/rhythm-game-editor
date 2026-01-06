@@ -1,0 +1,55 @@
+<h2 class="section-header">편집 도구</h2>
+<div class="control-group">
+    <div class="form-row" style="margin-bottom: 15px;">
+        <label style="font-size: 0.7rem; color: #888;">비트 스냅 (N)</label>
+        <input type="number" id="snapInput" value="4" style="width: 100%; background: #2a2a2a; border: none; color: white; padding: 8px; border-radius: 4px;">
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; background: #252525; padding: 5px; border-radius: 8px;">
+        <button id="btn-magnet" class="tool-btn active"><i data-lucide="magnet" size="16"></i></button>
+        <button id="btn-mirror" class="tool-btn"><i data-lucide="flip-horizontal-2" size="16"></i></button>
+        <button id="btn-flip" class="tool-btn"><i data-lucide="flip-vertical-2" size="16"></i></button>
+        <button id="btn-random" class="tool-btn"><i data-lucide="dices" size="16"></i></button>
+    </div>
+</div>
+
+<script>
+    let clipboard = [];
+    let historyStack = [];
+
+    function initEditor() {
+        // 단축키 감지 (Ctrl+C, V, X, Z)
+        window.addEventListener('keydown', (e) => {
+            if (!e.ctrlKey) return;
+            
+            if (e.key === 'c') { // 복사
+                clipboard = allNotesData.filter(n => selectedNoteIds.has(n.id)).map(n => ({...n, id: Math.random()}));
+            }
+            if (e.key === 'v') { // 붙여넣기
+                saveHistory();
+                clipboard.forEach(n => {
+                    const clone = {...n, id: Math.random().toString(36).substr(2,9), beat: n.beat + 1};
+                    allNotesData.push(clone);
+                });
+                renderVisibleNotes();
+            }
+            if (e.key === 'z') { // 실행 취소
+                if (historyStack.length > 0) {
+                    allNotesData = historyStack.pop();
+                    renderVisibleNotes();
+                }
+            }
+        });
+
+        document.getElementById('btn-random').onclick = () => {
+            saveHistory();
+            allNotesData.forEach(n => { if(selectedNoteIds.has(n.id)) n.lane = Math.floor(Math.random()*4); });
+            renderVisibleNotes();
+        };
+    }
+
+    function saveHistory() {
+        historyStack.push(JSON.parse(JSON.stringify(allNotesData)));
+        if (historyStack.length > 50) historyStack.shift();
+    }
+</script>
+<style>.tool-btn { background: none; border: none; color: #555; cursor: pointer; padding: 5px; }.tool-btn.active { color: #33ccff; }</style>
