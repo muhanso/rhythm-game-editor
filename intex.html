@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rhythm Editor Pro - Modular Edition</title>
+    <!-- Lucide 아이콘 라이브러리 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg-deep: #121212;
+            --sidebar-bg: #181818;
+            --card-bg: #1e1e1e;
+            --accent-blue: #33ccff; 
+            --accent-green: #43ff64;
+            --lane-top: #2a2a2a;
+            --lane-bottom: #000000;
+            --grid-line: rgba(255, 255, 255, 0.1); 
+            --text-main: #e0e0e0;
+            --text-dim: #888;
+        }
+
+        * { box-sizing: border-box; }
+        body, html {
+            margin: 0; padding: 0; height: 100%;
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            font-family: 'Pretendard', sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .app-layout {
+            display: grid;
+            grid-template-columns: 280px 1fr 320px;
+            height: 100vh;
+        }
+
+        /* --- 사이드바 공통 --- */
+        aside {
+            background-color: var(--sidebar-bg);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+            border-color: #222;
+            border-style: solid;
+        }
+        .sidebar-left { border-right-width: 1px; }
+        .sidebar-right { border-left-width: 1px; overflow-y: auto; }
+
+        /* --- 에디터 메인 영역 --- */
+        .editor-viewport {
+            position: relative;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: default;
+        }
+        .editor-viewport::-webkit-scrollbar { width: 10px; }
+        .editor-viewport::-webkit-scrollbar-track { background: #111; }
+        .editor-viewport::-webkit-scrollbar-thumb { background: #333; border-radius: 5px; }
+
+        .chart-area {
+            position: relative;
+            width: 348px;
+            min-height: 8000px;
+            background: linear-gradient(to top, var(--lane-bottom), var(--lane-top)) fixed;
+            border-left: 1px solid rgba(255,255,255,0.1);
+            border-right: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+        }
+
+        /* 판정선 영역 */
+        .lane-footer {
+            position: sticky;
+            bottom: 20px;
+            width: 348px;
+            background: rgba(18, 18, 18, 0.95);
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            z-index: 1000;
+            border-top: 4px solid var(--accent-blue);
+            box-shadow: 0 -15px 30px rgba(0,0,0,0.9);
+            margin-bottom: 20px;
+        }
+
+        .key-bind-btn {
+            height: 100px;
+            color: var(--accent-blue);
+            font-size: 1.5rem;
+            font-weight: 900;
+            background: transparent;
+            border: none;
+            border-right: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .key-bind-btn.pressed { 
+            background: linear-gradient(to top, rgba(51, 204, 255, 0.5), transparent); 
+            color: #fff; 
+        }
+
+        /* --- 파형 및 그리드 --- */
+        #waveformCanvas {
+            position: fixed;
+            top: 0; left: 50%;
+            transform: translateX(-50%);
+            width: 348px; height: 100%;
+            pointer-events: none; opacity: 0.25; z-index: 0;
+        }
+
+        .grid-layer {
+            position: absolute;
+            inset: 0;
+            background-image: linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px);
+            background-size: 100% 120px;
+            background-position: bottom;
+            pointer-events: none; z-index: 1;
+        }
+
+        .lanes { display: grid; grid-template-columns: repeat(4, 1fr); width: 100%; height: 100%; z-index: 2; }
+        .lane { border-right: 1px solid rgba(255,255,255,0.05); position: relative; }
+
+        /* --- 노트 기본 스타일 --- */
+        .note {
+            position: absolute;
+            width: 100%; height: 28px;
+            border-radius: 2px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: grab;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            z-index: 5;
+        }
+        .lane[data-lane="0"] .note, .lane[data-lane="3"] .note { background: linear-gradient(90deg, #00d2ff, #3a7bd5); }
+        .lane[data-lane="1"] .note, .lane[data-lane="2"] .note { background: linear-gradient(90deg, #e0e0e0, #a0a0a0); }
+        .note.custom-note { background: linear-gradient(90deg, #333, #555) !important; border-color: #444 !important; }
+        .note.long-note { filter: brightness(1.2); border: 1.5px solid rgba(255, 255, 255, 0.5); }
+        .note-resizer { height: 10px; width: 100%; background: rgba(255, 255, 255, 0.4); cursor: ns-resize; border-radius: 2px 2px 0 0; }
+        .note.selected { outline: 3px solid #ffffff; box-shadow: 0 0 15px #fff; z-index: 10; }
+
+        /* --- UI 요소 공통 --- */
+        .control-group { background: var(--card-bg); padding: 15px; border-radius: 12px; margin-bottom: 20px; }
+        .section-header { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; margin-bottom: 10px; display: block; letter-spacing: 1px; }
+        
+        #countdownOverlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+            display: none; align-items: center; justify-content: center;
+            z-index: 9999; font-size: 15rem; font-weight: 900; color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+<div id="countdownOverlay">3</div>
+
+<div class="app-layout">
+    <!-- 좌측 사이드바: 편집 도구 모듈 -->
+    <aside class="sidebar-left">
+        {% include editor.html %}
+    </aside>
+
+    <!-- 중앙 에디터 뷰포트 -->
+    <section class="editor-viewport" id="viewport">
+        <canvas id="waveformCanvas"></canvas>
+        <div class="chart-area" id="chartArea">
+            <div class="grid-layer" id="gridLayer"></div>
+            <div class="lanes">
+                <div class="lane" data-lane="0"></div>
+                <div class="lane" data-lane="1"></div>
+                <div class="lane" data-lane="2"></div>
+                <div class="lane" data-lane="3"></div>
+            </div>
+        </div>
+        <div class="lane-footer">
+            <button class="key-bind-btn" data-lane="0">A</button>
+            <button class="key-bind-btn" data-lane="1">S</button>
+            <button class="key-bind-btn" data-lane="2">;</button>
+            <button class="key-bind-btn" data-lane="3">'</button>
+        </div>
+    </section>
+
+    <!-- 우측 사이드바: 업로드 및 설정 모듈 -->
+    <aside class="sidebar-right">
+        {% include upload.html %}
+        
+        <span class="section-header">설정</span>
+        <div class="control-group">
+            {% include audio_settings.html %}
+            <hr style="border: 0; border-top: 1px solid #333; margin: 15px 0;">
+            {% include play_settings.html %}
+        </div>
+
+        {% include play.html %}
+
+        <button class="btn-export" id="exportBtn" style="width: 100%; padding: 14px; background: var(--accent-green); border: none; color: #000; font-weight: bold; border-radius: 8px; cursor: pointer; margin-top: auto;">CSV 저장</button>
+    </aside>
+</div>
+
+<script>
+    /** -----------------------------------------------------------------------
+     * 전역 공유 상태 및 핵심 엔진 (Global Engine)
+     * ---------------------------------------------------------------------- */
+    let allNotesData = [];       // 전체 노트 데이터
+    let selectedNoteIds = new Set(); // 선택된 노트 ID
+    let currentChartHeight = 15000;
+    let pixelsPerBeat = 200;
+    let isMagnetEnabled = true;
+    
+    // 오디오 관련
+    let audioCtx = null, audioBuffer = null, sourceNode = null;
+    let isPlaying = false, audioStartOffset = 0;
+    
+    // 조작 및 설정 상수
+    const HITLINE_OFFSET = 120; // 판정선 위치
+    const PADDING_SEC = 5;      // 곡 전후 여백(초)
+    const RENDER_BUFFER = 4000; // 가상 렌더링 버퍼(px)
+
+    const viewport = document.getElementById('viewport');
+    const chartArea = document.getElementById('chartArea');
+    const gridLayer = document.getElementById('gridLayer');
+    const waveformCanvas = document.getElementById('waveformCanvas');
+
+    /** --- [핵심] 좌표 및 시간 계산 함수 --- */
+    function getPaddingPixels() {
+        const bpm = parseFloat(document.getElementById('bpmInput')?.value || 120);
+        return PADDING_SEC * (pixelsPerBeat * (bpm / 60));
+    }
+
+    function getTimeFromY(y) {
+        const bpm = parseFloat(document.getElementById('bpmInput')?.value || 120);
+        const offset = parseFloat(document.getElementById('offsetInput')?.value || 0);
+        const paddingPx = getPaddingPixels();
+        const distFromStart = (currentChartHeight - paddingPx) - y;
+        return (distFromStart / pixelsPerBeat) * (60 / bpm) + offset;
+    }
+
+    function getYFromTime(time) {
+        const bpm = parseFloat(document.getElementById('bpmInput')?.value || 120);
+        const offset = parseFloat(document.getElementById('offsetInput')?.value || 0);
+        const beat = (time - offset) * (bpm / 60);
+        return (currentChartHeight - getPaddingPixels()) - (beat * pixelsPerBeat);
+    }
+
+    /** --- [핵심] 가상 렌더링 엔진 --- */
+    let visibleNoteElements = new Map();
+
+    function renderVisibleNotes() {
+        const paddingPx = getPaddingPixels();
+        const vTop = viewport.scrollTop;
+        const vBottom = vTop + viewport.clientHeight;
+        
+        const renderMin = vTop - RENDER_BUFFER;
+        const renderMax = vBottom + RENDER_BUFFER;
+
+        // 1. 현재 범위 내 데이터 필터링
+        const visibleData = allNotesData.filter(n => {
+            const yHead = (currentChartHeight - paddingPx) - ((n.beat - 1) * pixelsPerBeat) - 14;
+            const h = (n.attribute === "5" ? n.duration * pixelsPerBeat : 28);
+            return (yHead + 28 >= renderMin && (yHead - h + 28) <= renderMax);
+        });
+
+        const visibleIds = new Set(visibleData.map(n => n.id));
+
+        // 2. 화면 밖 요소 제거
+        for (let [id, el] of visibleNoteElements) {
+            if (!visibleIds.has(id)) {
+                el.remove();
+                visibleNoteElements.delete(id);
+            }
+        }
+
+        // 3. 요소 생성 및 위치 업데이트
+        visibleData.forEach(data => {
+            if (!visibleNoteElements.has(data.id)) {
+                const el = createNoteDOM(data);
+                visibleNoteElements.set(data.id, el);
+            } else {
+                updateNoteDOM(visibleNoteElements.get(data.id), data);
+            }
+        });
+
+        if (audioBuffer && typeof drawWaveformVisible === 'function') drawWaveformVisible();
+    }
+
+    function createNoteDOM(data) {
+        const el = document.createElement('div');
+        el.className = 'note';
+        if (data.isCustom) el.classList.add('custom-note');
+        if (data.attribute === "5") el.classList.add('long-note');
+        if (selectedNoteIds.has(data.id)) el.classList.add('selected');
+        
+        if (data.attribute === "5") {
+            const resizer = document.createElement('div');
+            resizer.className = 'note-resizer';
+            el.appendChild(resizer);
+        }
+
+        updateNoteDOM(el, data);
+        document.querySelectorAll('.lane')[data.lane].appendChild(el);
+
+        el.onmousedown = (e) => {
+            e.stopPropagation();
+            if (!e.shiftKey && !selectedNoteIds.has(data.id)) {
+                selectedNoteIds.clear();
+                document.querySelectorAll('.note.selected').forEach(n => n.classList.remove('selected'));
+            }
+            selectedNoteIds.add(data.id);
+            el.classList.add('selected');
+        };
+        return el;
+    }
+
+    function updateNoteDOM(el, data) {
+        const paddingPx = getPaddingPixels();
+        let top = (currentChartHeight - paddingPx) - ((data.beat - 1) * pixelsPerBeat) - 14;
+        if (data.attribute === "5") {
+            const h = data.duration * pixelsPerBeat;
+            el.style.height = `${h}px`;
+            top -= (h - 28); 
+        }
+        el.style.top = `${top}px`;
+    }
+
+    /** --- 초기화 및 이벤트 --- */
+    window.onload = () => {
+        lucide.createIcons();
+        viewport.scrollTop = currentChartHeight;
+        
+        // 무한 스크롤 및 확장
+        viewport.onscroll = () => {
+            if (viewport.scrollTop < 2000) {
+                const extra = 8000;
+                currentChartHeight += extra;
+                chartArea.style.minHeight = `${currentChartHeight}px`;
+                viewport.scrollTop += extra;
+            }
+            renderVisibleNotes();
+        };
+
+        // 레인 클릭 시 노트 추가
+        chartArea.onclick = (e) => {
+            if (e.target.classList.contains('lane')) {
+                const rect = chartArea.getBoundingClientRect();
+                const distFromStart = (currentChartHeight - getPaddingPixels()) - (e.clientY - rect.top + viewport.scrollTop);
+                // 모듈에서 정의될 addNoteAtPos 호출
+                if (typeof addNoteAtPos === 'function') addNoteAtPos(parseInt(e.target.dataset.lane), distFromStart);
+            }
+        };
+
+        if (typeof initEditor === 'function') initEditor();
+        if (typeof initPlay === 'function') initPlay();
+    };
+</script>
+</body>
+</html>
